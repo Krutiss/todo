@@ -165,7 +165,7 @@
     <script>
         // --- START FIREBASE CONFIG ---
         const firebaseConfig = {
-     apiKey: "AIzaSyDPBM-u6syLdJgdBw6gD2PTPmcc1zB2vpI",
+ apiKey: "AIzaSyDPBM-u6syLdJgdBw6gD2PTPmcc1zB2vpI",
     authDomain: "to-do-2ace7.firebaseapp.com",
     projectId: "to-do-2ace7",
     storageBucket: "to-do-2ace7.firebasestorage.app",
@@ -189,9 +189,6 @@
         let userTasks = []; 
 
         const defaultTasksStructure = [
-            // ... (Existing categories - Before Start of Term, Daily Routine, Before Bed)
-            // Ensure all items have: completed: false, isCustom: false, dueDate: null, notificationShown: false
-            // AND originalCategoryId: null (new property)
             {
                 id: 'term_start', title_th: 'ก่อนเปิดภาคเรียน', title_en: 'Before Start of Term',
                 items: [
@@ -260,6 +257,32 @@
         const taskArea = document.getElementById('task-area');
         const viewTabs = document.querySelectorAll('.view-tab');
 
+        // --- AUTHENTICATION FUNCTIONS (MOVED EARLIER) ---
+        const signInWithGoogle = () => {
+            auth.signInWithPopup(googleProvider)
+                .then((result) => {
+                    console.log("Signed in with Google:", result.user.displayName);
+                    // onAuthStateChanged will handle the rest
+                })
+                .catch((error) => {
+                    console.error("Google Sign-In Error:", error);
+                    alert(`${getLocalizedText({text_th: "เกิดข้อผิดพลาดในการเข้าสู่ระบบด้วย Google:", text_en: "Error signing in with Google:"})} ${error.message}`);
+                });
+        };
+
+        const signOutUser = () => {
+            auth.signOut()
+                .then(() => {
+                    console.log("User signed out.");
+                     // onAuthStateChanged will handle UI changes
+                })
+                .catch((error) => {
+                    console.error("Sign Out Error:", error);
+                });
+        };
+
+
+        // --- Firebase Helper Functions ---
         const getUserDocRef = () => currentUser ? db.collection('users').doc(currentUser.uid) : null;
 
         const saveUserDataToFirestore = async () => {
@@ -268,7 +291,7 @@
             try {
                 const tasksToSave = JSON.parse(JSON.stringify(userTasks)).map(category => {
                     const cleanCategory = { ...category };
-                    delete cleanCategory.editingDueDate; // Ensure temporary flags are not saved
+                    delete cleanCategory.editingDueDate; 
                     if (cleanCategory.items) {
                         cleanCategory.items = cleanCategory.items.map(item => {
                             const { editingDueDate, ...restOfItem } = item;
@@ -306,20 +329,17 @@
                     const data = doc.data();
                     appData = { ...appData, ...(data.settings || {}) };
                     
-                    // Merge tasks: ensure all default categories exist, and new properties are added
                     const defaultStructureCopy = JSON.parse(JSON.stringify(defaultTasksStructure));
                     const firestoreTasks = data.tasks || [];
 
                     userTasks = defaultStructureCopy.map(defaultCat => {
                         const firestoreCat = firestoreTasks.find(fc => fc.id === defaultCat.id);
                         if (firestoreCat) {
-                            // Merge items, prioritizing Firestore for existing, adding new default items
                             let mergedItems = defaultCat.items ? defaultCat.items.map(defaultItem => {
                                 const firestoreItem = firestoreCat.items.find(fi => fi.id === defaultItem.id);
                                 return firestoreItem ? { ...defaultItem, ...firestoreItem, originalCategoryId: firestoreItem.originalCategoryId !== undefined ? firestoreItem.originalCategoryId : defaultItem.originalCategoryId } : defaultItem;
                             }) : [];
 
-                            // Add custom tasks from Firestore
                             if (firestoreCat.items) {
                                 firestoreCat.items.forEach(fi => {
                                     if (fi.isCustom && !mergedItems.some(mi => mi.id === fi.id)) {
@@ -329,7 +349,6 @@
                             }
                             defaultCat.items = mergedItems;
 
-                            // Handle subcategories similarly
                             if (defaultCat.subCategories) {
                                 defaultCat.subCategories = defaultCat.subCategories.map(defaultSubCat => {
                                     const firestoreSubCat = firestoreCat.subCategories?.find(fsc => fsc.id === defaultSubCat.id);
@@ -351,7 +370,6 @@
                         }
                         return defaultCat;
                     });
-                    // Ensure "Done" category exists
                     if (!userTasks.find(cat => cat.id === 'done')) {
                         userTasks.push(JSON.parse(JSON.stringify(defaultTasksStructure.find(cat => cat.id === 'done'))));
                     }
@@ -372,11 +390,12 @@
             viewTabs.forEach(t => t.classList.remove('active'));
             const activeTab = document.querySelector(`.view-tab[data-view="${appData.currentView}"]`) || document.querySelector('.view-tab[data-view="category"]');
             activeTab.classList.add('active');
-            if (!appData.currentView) appData.currentView = activeTab.dataset.view; // Ensure currentView is set
+            if (!appData.currentView) appData.currentView = activeTab.dataset.view; 
             renderTasks();
             checkAndShowReminders();
         };
 
+        // --- AUTH STATE CHANGE LISTENER ---
         auth.onAuthStateChanged(async (user) => {
             currentUser = user;
             if (user) {
@@ -410,7 +429,7 @@
             return date.toLocaleString(appData.currentLanguage === 'th' ? 'th-TH' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: appData.currentLanguage === 'en' });
         };
 
-        const requestNotificationPermission = async () => { /* ... same ... */ 
+        const requestNotificationPermission = async () => { 
             if (!('Notification' in window)) {
                 alert(getLocalizedText({text_th: 'เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน', text_en: 'This browser does not support desktop notification'}));
                 return false;
@@ -422,13 +441,13 @@
             }
             return false;
         };
-        const showNotification = (task) => { /* ... same ... */ 
+        const showNotification = (task) => { 
             const title = getLocalizedText({text_th: '🔔 ครูพร้อมสอน: แจ้งเตือนงาน', text_en: '🔔 Teacher\'s Prep: Task Reminder'});
             const body = getLocalizedText(task);
             const options = { body: body, icon: 'https://placehold.co/48x48/6366f1/ffffff?text=🔔' };
             new Notification(title, options);
         };
-        const checkAndShowReminders = () => { /* ... same, uses userTasks ... */ 
+        const checkAndShowReminders = () => { 
             if (!currentUser || !userTasks || userTasks.length === 0) return; 
             const now = new Date();
             let madeChanges = false;
@@ -454,17 +473,17 @@
             if (!currentUser) { taskArea.innerHTML = ''; return; }
             taskArea.innerHTML = '';
             let categoriesToRender = [];
-            const doneCategoryFromData = userTasks.find(cat => cat.id === 'done'); // Get the "Done" category separately
+            const doneCategoryFromData = userTasks.find(cat => cat.id === 'done'); 
 
             if (appData.currentView === 'category') {
-                userTasks.filter(cat => cat.id !== 'done').forEach(category => { // Exclude "Done" from normal flow
+                userTasks.filter(cat => cat.id !== 'done').forEach(category => { 
                     if (category.items) categoriesToRender.push(JSON.parse(JSON.stringify(category)));
                     else if (category.subCategories) category.subCategories.forEach(subCat => categoriesToRender.push(JSON.parse(JSON.stringify(subCat))));
                 });
-                if (doneCategoryFromData) { // Add "Done" category at the end for "category" view
+                if (doneCategoryFromData) { 
                     categoriesToRender.push(JSON.parse(JSON.stringify(doneCategoryFromData)));
                 }
-            } else { // For other views, filter out "Done" tasks
+            } else { 
                 let tempCategories = [];
                  userTasks.filter(cat => cat.id !== 'done').forEach(category => {
                     if (category.items) tempCategories.push(JSON.parse(JSON.stringify(category)));
@@ -481,7 +500,7 @@
                     const afterClass = tempCategories.find(cat => cat.id === 'daily_after_class');
                     if (afterClass) categoriesToRender.push(afterClass);
                 } else if (appData.currentView === 'time_night') {
-                    const beforeBed = tempCategories.find(cat => cat.id === 'before_bed'); // Assuming 'before_bed' is a top-level ID in tempCategories
+                    const beforeBed = tempCategories.find(cat => cat.id === 'before_bed'); 
                     if (beforeBed) categoriesToRender.push(beforeBed);
                 }
             }
@@ -496,9 +515,9 @@
                 categoryTitle.textContent = getLocalizedText(category, 'title');
                 categoryDiv.appendChild(categoryTitle);
 
-                if (!isDoneCategory) { // Only show progress bar for non-Done categories
-                    const totalTasks = category.items.length; // Should count only incomplete if we want "progress"
-                    const incompleteTasks = category.items.filter(task => !task.completed).length; // This is better for progress
+                if (!isDoneCategory) { 
+                    const totalTasks = category.items.length; 
+                    const incompleteTasks = category.items.filter(task => !task.completed).length; 
                     const progressPercentage = totalTasks > 0 ? ((totalTasks - incompleteTasks) / totalTasks) * 100 : 0;
 
                     const progressContainerDiv = document.createElement('div');
@@ -538,11 +557,11 @@
                     checkbox.type = 'checkbox';
                     checkbox.checked = task.completed;
                     checkbox.className = 'form-checkbox h-5 w-5 text-indigo-600 dark:text-indigo-400 border-gray-300 dark:border-gray-500 rounded focus:ring-indigo-500 dark:focus:ring-indigo-400 mr-3 flex-shrink-0 mt-1';
-                    checkbox.addEventListener('change', () => toggleTaskComplete(category.id, task.id, task.originalCategoryId)); // Pass originalCategoryId
+                    checkbox.addEventListener('change', () => toggleTaskComplete(category.id, task.id, task.originalCategoryId)); 
                     const taskTextSpan = document.createElement('span');
                     taskTextSpan.textContent = getLocalizedText(task);
                     taskTextSpan.className = `text-gray-700 dark:text-gray-200 ${task.completed ? 'line-through text-gray-500 dark:text-gray-400' : ''}`;
-                    if (task.isCustom && !isDoneCategory) { // Allow edit only if custom and not in Done category
+                    if (task.isCustom && !isDoneCategory) { 
                         taskTextSpan.classList.add('cursor-pointer', 'hover:text-indigo-500', 'dark:hover:text-indigo-300');
                         taskTextSpan.addEventListener('click', () => enableTaskEdit(taskTextSpan, category.id, task.id));
                     }
@@ -552,14 +571,46 @@
 
                     const dueDateContainer = document.createElement('div');
                     dueDateContainer.className = 'ml-8 mt-1 text-xs';
-                    if (task.editingDueDate) { /* ... date input rendering ... */ }
-                    else if (task.dueDate) { /* ... date display rendering ... */ }
-                    taskMainContentDiv.appendChild(dueDateContainer); // Simplified for brevity
+                    if (task.editingDueDate) { 
+                        const dateInputDiv = document.createElement('div');
+                        dateInputDiv.className = 'date-input-container flex items-center space-x-1';
+                        const dateInput = document.createElement('input');
+                        dateInput.type = 'datetime-local';
+                        dateInput.className = 'p-1 border border-gray-300 dark:border-gray-500 rounded-md text-xs';
+                        dateInput.value = task.dueDate ? task.dueDate.slice(0, 16) : '';
+                        const saveDateBtn = document.createElement('button');
+                        saveDateBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-500 hover:text-green-700" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>`;
+                        saveDateBtn.title = getLocalizedText({text_th: 'บันทึกวันที่', text_en: 'Save Date'});
+                        saveDateBtn.onclick = () => setTaskDueDate(category.id, task.id, dateInput.value);
+                        const cancelDateBtn = document.createElement('button');
+                        cancelDateBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-500 hover:text-gray-700" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>`;
+                        cancelDateBtn.title = getLocalizedText({text_th: 'ยกเลิก', text_en: 'Cancel'});
+                        cancelDateBtn.onclick = () => toggleDueDateEdit(category.id, task.id, false);
+                        dateInputDiv.appendChild(dateInput);
+                        dateInputDiv.appendChild(saveDateBtn);
+                        dateInputDiv.appendChild(cancelDateBtn);
+                        if (task.dueDate) {
+                            const clearBtn = document.createElement('button');
+                            clearBtn.innerHTML = `&times;`;
+                            clearBtn.className = 'clear-date-btn text-sm';
+                            clearBtn.title = getLocalizedText({text_th: 'ลบวันที่', text_en: 'Clear Date'});
+                            clearBtn.onclick = (e) => { e.stopPropagation(); setTaskDueDate(category.id, task.id, null); };
+                            dateInputDiv.appendChild(clearBtn);
+                        }
+                        dueDateContainer.appendChild(dateInputDiv);
+                    } else if (task.dueDate) { 
+                        const dueDateText = document.createElement('span');
+                        dueDateText.className = 'due-date-text text-gray-500 dark:text-gray-400';
+                        dueDateText.textContent = `${getLocalizedText({text_th: 'ครบกำหนด: ', text_en: 'Due: '})}${formatDueDate(task.dueDate)}`;
+                        if (new Date(task.dueDate) < new Date() && !task.completed) dueDateText.classList.add('overdue');
+                        dueDateContainer.appendChild(dueDateText);
+                    }
+                    taskMainContentDiv.appendChild(dueDateContainer); 
                     li.appendChild(taskMainContentDiv);
 
                     const actionButtonsDiv = document.createElement('div');
                     actionButtonsDiv.className = 'task-actions flex-shrink-0 ml-2 space-x-1';
-                    if (!isDoneCategory) { // Due date button only for non-Done tasks
+                    if (!isDoneCategory) { 
                         const dueDateBtn = document.createElement('button');
                         dueDateBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd" /></svg>`;
                         dueDateBtn.className = 'text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 p-1 rounded-full';
@@ -567,7 +618,7 @@
                         dueDateBtn.addEventListener('click', () => toggleDueDateEdit(category.id, task.id, true));
                         actionButtonsDiv.appendChild(dueDateBtn);
                     }
-                    if (task.isCustom) { // Delete button for custom tasks (even in Done)
+                    if (task.isCustom) { 
                         const deleteBtn = document.createElement('button');
                         deleteBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 delete-task-btn" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>`;
                         deleteBtn.className = 'text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 p-1 rounded-full delete-task-btn';
@@ -580,15 +631,22 @@
                 });
                 categoryDiv.appendChild(ul);
 
-                if (!isDoneCategory) { // Add task form only for non-Done categories
-                    const addTaskForm = document.createElement('form'); /* ... form rendering ... */ 
+                if (!isDoneCategory) { 
+                    const addTaskForm = document.createElement('form'); 
                     addTaskForm.className = 'mt-4 flex items-center space-x-2';
-                    addTaskForm.addEventListener('submit', (e) => { /* ... */ });
-                    const taskInput = document.createElement('input'); /* ... */
+                    addTaskForm.addEventListener('submit', (e) => { 
+                        e.preventDefault();
+                        const input = addTaskForm.querySelector('input[type="text"]');
+                        if (input.value.trim()) {
+                            addNewTask(category.id, input.value.trim());
+                            input.value = '';
+                        }
+                    });
+                    const taskInput = document.createElement('input'); 
                     taskInput.type = 'text';
                     taskInput.className = 'flex-grow p-2 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-600 dark:text-gray-100';
                     taskInput.placeholder = getLocalizedText({text_th: 'เพิ่มงานใหม่...', text_en: 'Add new task...'});
-                    const addTaskBtn = document.createElement('button'); /* ... */
+                    const addTaskBtn = document.createElement('button'); 
                     addTaskBtn.type = 'submit';
                     addTaskBtn.className = 'bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition-colors';
                     addTaskBtn.textContent = getLocalizedText({text_th: 'เพิ่ม', text_en: 'Add'});
@@ -601,15 +659,51 @@
             updateUIForLanguage();
         };
 
-        const enableTaskEdit = (spanElement, categoryId, taskId) => { /* ... same ... */ };
-        const updateUIForLanguage = () => { /* ... same ... */ 
+        const enableTaskEdit = (spanElement, categoryId, taskId) => { 
+            const currentText = spanElement.textContent;
+            const inputElement = document.createElement('input');
+            inputElement.type = 'text';
+            inputElement.value = currentText;
+            inputElement.className = 'text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-600 border border-indigo-300 dark:border-indigo-500 rounded px-1 py-0.5 w-full';
+            spanElement.replaceWith(inputElement);
+            inputElement.focus();
+            const saveEdit = () => {
+                const newText = inputElement.value.trim();
+                updateTaskText(categoryId, taskId, newText); 
+                renderTasks(); 
+            };
+            inputElement.addEventListener('blur', saveEdit);
+            inputElement.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); saveEdit(); } 
+                else if (e.key === 'Escape') { renderTasks(); }
+            });
+        };
+        const updateUIForLanguage = () => { 
             document.documentElement.lang = appData.currentLanguage;
             appTitle.textContent = appData.currentLanguage === 'th' ? 'ครูพร้อมสอน' : "Teacher's Prep List";
             document.querySelectorAll('.lang-th').forEach(el => el.classList.toggle('hidden', appData.currentLanguage !== 'th'));
             document.querySelectorAll('.lang-en').forEach(el => el.classList.toggle('hidden', appData.currentLanguage !== 'en'));
             if(languageToggleBtn) languageToggleBtn.textContent = appData.currentLanguage === 'th' ? 'English' : 'ไทย';
+             // Update placeholders and button texts in dynamically generated forms
+            document.querySelectorAll('#task-area input[type="text"]').forEach(input => {
+                input.placeholder = getLocalizedText({text_th: 'เพิ่มงานใหม่...', text_en: 'Add new task...'});
+            });
+            document.querySelectorAll('#task-area button[type="submit"]').forEach(button => {
+                button.textContent = getLocalizedText({text_th: 'เพิ่ม', text_en: 'Add'});
+            });
+             // Update login/logout button text
+            const loginGoogleButton = document.getElementById('login-google-button');
+            if (loginGoogleButton) {
+                loginGoogleButton.querySelector('.lang-th').classList.toggle('hidden', appData.currentLanguage !== 'th');
+                loginGoogleButton.querySelector('.lang-en').classList.toggle('hidden', appData.currentLanguage !== 'en');
+            }
+            const logoutButton = document.getElementById('logout-button');
+            if (logoutButton) {
+                logoutButton.querySelector('.lang-th').classList.toggle('hidden', appData.currentLanguage !== 'th');
+                logoutButton.querySelector('.lang-en').classList.toggle('hidden', appData.currentLanguage !== 'en');
+            }
         };
-        const applyDarkMode = () => { /* ... same ... */ 
+        const applyDarkMode = () => { 
              if (appData.darkMode) {
                 document.documentElement.classList.add('dark');
                 if(themeToggleLightIcon) themeToggleLightIcon.classList.remove('hidden');
@@ -624,23 +718,22 @@
         const toggleTaskComplete = (currentDisplayCategoryId, taskId) => {
             if (!currentUser) return;
 
-            let task, originalCategory, taskIndex;
+            let task, sourceCategory, taskIndexInSource;
             let isMovingToDone = false;
 
-            // Find the task and its current category
-            if (currentDisplayCategoryId === 'done') { // Task is currently in "Done" category
-                originalCategory = findCategoryOrSubcategory('done', userTasks);
-                task = originalCategory.items.find(t => t.id === taskId);
+            if (currentDisplayCategoryId === 'done') {
+                sourceCategory = findCategoryOrSubcategory('done', userTasks);
+                task = sourceCategory?.items.find(t => t.id === taskId);
                 if (!task) return;
-                taskIndex = originalCategory.items.findIndex(t => t.id === taskId);
+                taskIndexInSource = sourceCategory.items.findIndex(t => t.id === taskId);
                 isMovingToDone = false; // Will be moved back to original
-            } else { // Task is in a regular category
-                originalCategory = findCategoryOrSubcategory(currentDisplayCategoryId, userTasks);
-                if (!originalCategory || !originalCategory.items) return;
-                task = originalCategory.items.find(t => t.id === taskId);
+            } else {
+                sourceCategory = findCategoryOrSubcategory(currentDisplayCategoryId, userTasks);
+                if (!sourceCategory || !sourceCategory.items) return;
+                task = sourceCategory.items.find(t => t.id === taskId);
                 if (!task) return;
-                taskIndex = originalCategory.items.findIndex(t => t.id === taskId);
-                isMovingToDone = !task.completed; // If checking as complete, move to Done
+                taskIndexInSource = sourceCategory.items.findIndex(t => t.id === taskId);
+                isMovingToDone = !task.completed; 
             }
 
             if (!task) {
@@ -648,50 +741,39 @@
                 return;
             }
 
-            task.completed = !task.completed; // Toggle completion status
+            task.completed = !task.completed; 
 
             if (isMovingToDone) {
-                // Moving to "Done"
-                task.originalCategoryId = currentDisplayCategoryId; // Store where it came from
-                originalCategory.items.splice(taskIndex, 1); // Remove from original category
-
+                task.originalCategoryId = currentDisplayCategoryId; 
+                sourceCategory.items.splice(taskIndexInSource, 1); 
                 let doneCategory = findCategoryOrSubcategory('done', userTasks);
-                if (!doneCategory) { // Should have been created by loadUserDataFromFirestore
-                    console.error("'Done' category not found in userTasks!");
-                    userTasks.push(JSON.parse(JSON.stringify(defaultTasksStructure.find(cat => cat.id === 'done')))); // Add it if missing
+                if (!doneCategory) {
+                    userTasks.push(JSON.parse(JSON.stringify(defaultTasksStructure.find(cat => cat.id === 'done')))); 
                     doneCategory = findCategoryOrSubcategory('done', userTasks);
                 }
                 doneCategory.items.push(task);
             } else if (currentDisplayCategoryId === 'done' && task.originalCategoryId) {
-                // Moving back from "Done" to its original category
                 const targetCategoryId = task.originalCategoryId;
-                originalCategory.items.splice(taskIndex, 1); // Remove from "Done"
-
+                sourceCategory.items.splice(taskIndexInSource, 1); 
                 const targetCategory = findCategoryOrSubcategory(targetCategoryId, userTasks);
-                if (targetCategory) {
+                if (targetCategory && targetCategory.items) { // Ensure targetCategory.items exists
                     targetCategory.items.push(task);
-                    task.originalCategoryId = null; // Clear originalCategoryId as it's back home
+                    task.originalCategoryId = null; 
                 } else {
-                    console.warn("Original category not found for task, placing in first available category:", targetCategoryId);
-                    // Fallback: add to the first non-done, non-sub-category category if original is somehow lost
+                    console.warn("Original category or its items array not found for task, placing in first available category:", targetCategoryId);
                     const fallbackCat = userTasks.find(c => c.id !== 'done' && c.items);
                     if (fallbackCat) fallbackCat.items.push(task);
-                    else userTasks[0].items.push(task); // Absolute fallback
+                    else if (userTasks[0] && userTasks[0].items) userTasks[0].items.push(task);
+                    else console.error("No fallback category available with an items array.");
                 }
             }
-            // If just unchecking within a normal category (isMovingToDone is false, currentDisplayCategoryId is not 'done'), it just stays.
-
             saveUserDataToFirestore();
             renderTasks();
         };
         
-        const findOriginalTaskById = (taskId, tasksArray = userTasks) => { /* ... same ... */ 
+        const findOriginalTaskById = (taskId, tasksArray = userTasks) => { 
              for (const mainCat of tasksArray) {
-                if (mainCat.id === 'done' && mainCat.items) { // Check done category too
-                    const task = mainCat.items.find(item => item.id === taskId);
-                    if (task) return task;
-                }
-                if (mainCat.items && mainCat.id !== 'done') {
+                if (mainCat.items) { 
                     const task = mainCat.items.find(item => item.id === taskId);
                     if (task) return task;
                 }
@@ -707,23 +789,33 @@
             return null;
         };
 
-        const addNewTask = (displayCategoryId, taskText) => { /* ... same, ensure originalCategoryId: null ... */ 
+        const addNewTask = (displayCategoryId, taskText) => { 
             if (!currentUser) return;
             const newTask = {
                 id: generateId(), text_th: taskText, text_en: taskText, 
                 completed: false, isCustom: true, dueDate: null, notificationShown: false, originalCategoryId: null
             };
-            // ... (language specific text setting)
+            if (/[\u0E00-\u0E7F]/.test(taskText)) { newTask.text_th = taskText; newTask.text_en = taskText; } 
+            else { newTask.text_en = taskText; newTask.text_th = taskText; }
+            
             const originalCategory = findCategoryOrSubcategory(displayCategoryId, userTasks); 
-            if (originalCategory && originalCategory.items && displayCategoryId !== 'done') { // Don't add new tasks to 'done'
+            if (originalCategory && originalCategory.items && displayCategoryId !== 'done') { 
                 originalCategory.items.push(newTask);
                 saveUserDataToFirestore();
                 renderTasks();
             }
         };
         
-        const updateTaskText = (displayCategoryId, taskId, newText) => { /* ... same ... */ };
-        const deleteTask = (displayCategoryId, taskId) => { /* ... same, handles deletion from any category including "Done" ... */ 
+        const updateTaskText = (displayCategoryId, taskId, newText) => { 
+            if (!currentUser) return;
+            if (!newText.trim()) { renderTasks(); return; }
+            const task = findOriginalTaskById(taskId, userTasks);
+            if (task && task.isCustom) {
+                task[`text_${appData.currentLanguage}`] = newText;
+                saveUserDataToFirestore();
+            }
+        };
+        const deleteTask = (displayCategoryId, taskId) => { 
              if (!currentUser) return;
             const category = findCategoryOrSubcategory(displayCategoryId, userTasks);
             if(category && category.items){
@@ -734,24 +826,71 @@
                 console.error("Category not found for deletion or items array missing", displayCategoryId);
             }
         };
-        const findOriginalCategoryForItem = (taskId, tasksArray = userTasks) => { /* ... same ... */ };
-        const findCategoryOrSubcategory = (id, source = userTasks) => { /* ... same ... */ 
+        const findOriginalCategoryForItem = (taskId, tasksArray = userTasks) => { 
+            for (const mainCat of tasksArray) {
+                if (mainCat.items && mainCat.items.find(item => item.id === taskId)) return mainCat;
+                if (mainCat.subCategories) {
+                    for (const subCat of mainCat.subCategories) {
+                        if (subCat.items && subCat.items.find(item => item.id === taskId)) return subCat;
+                    }
+                }
+            }
+            return null;
+        };
+        const findCategoryOrSubcategory = (id, source = userTasks) => { 
             for (let category of source) {
                 if (category.id === id) return category;
-                if (category.subCategories) { // Check subcategories
+                if (category.subCategories) { 
                     for (let subCategory of category.subCategories) {
                         if (subCategory.id === id) return subCategory;
                     }
                 }
             }
-            return null; // Return null if not found
+            return null; 
         };
-        const toggleDueDateEdit = (displayCategoryId, taskId, isEditing) => { /* ... same ... */ };
-        const setTaskDueDate = async (displayCategoryId, taskId, dueDateValue) => { /* ... same ... */ };
+        const toggleDueDateEdit = (displayCategoryId, taskId, isEditing) => { 
+            if (!currentUser) return;
+            const originalTask = findOriginalTaskById(taskId, userTasks);
+            if (originalTask) {
+                originalTask.editingDueDate = isEditing; 
+                renderTasks(); 
+            }
+        };
+        const setTaskDueDate = async (displayCategoryId, taskId, dueDateValue) => { 
+            if (!currentUser) return;
+            if (Notification.permission === 'default') await requestNotificationPermission();
+            const task = findOriginalTaskById(taskId, userTasks);
+            if (task) {
+                task.dueDate = dueDateValue ? new Date(dueDateValue).toISOString() : null;
+                task.notificationShown = false; 
+                task.editingDueDate = false; 
+                await saveUserDataToFirestore();
+                checkAndShowReminders(); 
+                renderTasks();
+            }
+        };
 
-        if(languageToggleBtn) languageToggleBtn.addEventListener('click', () => { /* ... same ... */ });
-        if(darkModeToggleBtn) darkModeToggleBtn.addEventListener('click', () => { /* ... same ... */ });
-        viewTabs.forEach(tab => { tab.addEventListener('click', () => { /* ... same ... */ }); });
+        if(languageToggleBtn) languageToggleBtn.addEventListener('click', () => { 
+            if (!currentUser) return;
+            appData.currentLanguage = appData.currentLanguage === 'th' ? 'en' : 'th';
+            saveUserDataToFirestore(); 
+            updateUIForLanguage(); 
+            renderTasks(); 
+        });
+        if(darkModeToggleBtn) darkModeToggleBtn.addEventListener('click', () => { 
+            if (!currentUser) return;
+            appData.darkMode = !appData.darkMode;
+            applyDarkMode();
+            saveUserDataToFirestore(); 
+        });
+        viewTabs.forEach(tab => { tab.addEventListener('click', () => { 
+            if (!currentUser) return;
+            appData.currentView = tab.dataset.view;
+            viewTabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            saveUserDataToFirestore(); 
+            renderTasks();
+        }); });
         if(exportCsvBtn) exportCsvBtn.addEventListener('click', () => { 
             if (!currentUser) return;
             let csvContent = "\uFEFF"; 
@@ -770,12 +909,12 @@
                 });
             };
 
-            userTasks.filter(cat => cat.id !== 'done').forEach(cat => { // Process non-done categories
+            userTasks.filter(cat => cat.id !== 'done').forEach(cat => { 
                 if (cat.items) processCategoryForCSV(cat);
                 else if (cat.subCategories) cat.subCategories.forEach(subCat => processCategoryForCSV(subCat));
             });
             
-            const doneCategory = userTasks.find(cat => cat.id === 'done'); // Process done category
+            const doneCategory = userTasks.find(cat => cat.id === 'done'); 
             if (doneCategory) processCategoryForCSV(doneCategory, true);
 
             const encodedUri = encodeURI(csvContent);
@@ -787,13 +926,20 @@
             document.body.removeChild(link);
         });
 
-        const initApp = () => { /* ... same ... */ 
+        const initApp = () => { 
             const localSettings = JSON.parse(localStorage.getItem('thaiTeacherTodoLocalSettings')) || {};
             appData.currentLanguage = localSettings.currentLanguage || 'th';
             appData.darkMode = localSettings.darkMode !== undefined ? localSettings.darkMode : false;
             applyDarkMode(); 
             updateUIForLanguage(); 
-            window.addEventListener('beforeunload', () => { /* ... */ });
+            window.addEventListener('beforeunload', () => { 
+                if (!currentUser) {
+                     localStorage.setItem('thaiTeacherTodoLocalSettings', JSON.stringify({
+                        currentLanguage: appData.currentLanguage,
+                        darkMode: appData.darkMode
+                    }));
+                }
+            });
             setInterval(checkAndShowReminders, 60000);
         };
         initApp();
