@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ครูพร้อมสอน - To-Do List</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sarabun:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        body {
+            font-family: 'Sarabun', 'Inter', sans-serif;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .dark {
+            background-color: #1f2937; /* gray-800 */
+            color: #f3f4f6; /* gray-100 */
+        }
+        .dark .bg-white { background-color: #374151; /* gray-700 */ }
+        .dark .text-gray-800 { color: #f3f4f6; /* gray-100 */ }
+        .dark .text-gray-700 { color: #d1d5db; /* gray-300 */ }
+        .dark .text-gray-600 { color: #d1d5db; /* gray-300 */ }
+        .dark .text-gray-500 { color: #9ca3af; /* gray-400 */ }
+        .dark .text-gray-400 { color: #9ca3af; /* gray-400 for due date */ }
+        .dark .border-gray-300 { border-color: #4b5563; /* gray-600 */ }
+        .dark .hover\:bg-gray-100:hover { background-color: #4b5563; /* gray-600 */ }
+        .dark .hover\:bg-gray-50:hover { background-color: #4b5563; /* gray-600 for task item hover */ }
+        .dark .hover\:bg-blue-600:hover { background-color: #3b82f6; }
+        .dark input[type="text"], .dark textarea, .dark input[type="datetime-local"] {
+            background-color: #4b5563; /* gray-600 */
+            color: #f3f4f6; /* gray-100 */
+            border-color: #6b7280; /* gray-500 */
+        }
+        .dark input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+        }
+        .dark .ring-indigo-500:focus {
+            --tw-ring-color: #6366f1 !important;
+        }
+        .task-item:hover .task-actions {
+            opacity: 1;
+        }
+        .task-actions {
+            opacity: 0.2;
+            transition: opacity 0.2s ease-in-out;
+            display: flex;
+            align-items: center;
+        }
+         .task-item:hover .task-actions button {
+            opacity: 0.7;
+        }
+        .task-item .task-actions button:hover {
+             opacity: 1;
+        }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+        .dark ::-webkit-scrollbar-track { background: #374151; }
+        ::-webkit-scrollbar-thumb { background: #888; border-radius: 10px; }
+        .dark ::-webkit-scrollbar-thumb { background: #555; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+        .dark ::-webkit-scrollbar-thumb:hover { background: #777; }
+        .tab-button.active {
+            border-bottom-width: 2px;
+            border-color: #6366f1;
+            color: #6366f1;
+            font-weight: 600;
+        }
+        .dark .tab-button.active {
+            border-color: #818cf8;
+            color: #818cf8;
+        }
+        .progress-bar-fill { transition: width 0.3s ease-out; }
+        .due-date-text { font-size: 0.8rem; }
+        .overdue { color: #ef4444; }
+        .dark .overdue { color: #f87171; }
+        .date-input-container { position: relative; }
+        .date-input-container input[type="datetime-local"] { padding-right: 2.5rem; }
+        .clear-date-btn {
+            position: absolute; right: 0.5rem; top: 50%;
+            transform: translateY(-50%); background: none; border: none;
+            cursor: pointer; color: #9ca3af;
+        }
+        .dark .clear-date-btn { color: #6b7280; }
+        .clear-date-btn:hover { color: #ef4444; }
+        .dark .clear-date-btn:hover { color: #f87171; }
+
+        /* Auth UI */
+        #auth-container {
+            text-align: center;
+            margin-top: 2rem;
+        }
+        #user-info {
+            font-size: 0.875rem; /* text-sm */
+            color: #4b5563; /* gray-600 */
+        }
+        .dark #user-info {
+             color: #d1d5db; /* gray-300 */
+        }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div id="app-container" class="max-w-5xl mx-auto p-4 sm:p-6 md:p-8">
+        <header class="mb-6">
+            <div class="flex flex-col sm:flex-row justify-between items-center mb-2">
+                <h1 id="app-title" class="text-3xl sm:text-4xl font-bold text-indigo-600 dark:text-indigo-400">ครูพร้อมสอน</h1>
+                <div id="auth-controls" class="flex items-center space-x-3 mt-2 sm:mt-0">
+                    </div>
+            </div>
+            <div id="user-info" class="text-sm text-gray-600 dark:text-gray-300 text-center sm:text-right mb-2"></div>
+            <p id="app-subtitle" class="text-gray-600 dark:text-gray-300 text-center sm:text-left">
+                <span class="lang-th">รายการสิ่งที่ต้องทำสำหรับครูไทยยุคใหม่</span>
+                <span class="lang-en hidden">Modern To-Do List for Thai Teachers</span>
+            </p>
+        </header>
+
+        <div id="main-content" class="hidden">
+            <div class="flex items-center justify-end space-x-3 mb-4">
+                 <button id="language-toggle" class="text-sm font-medium text-indigo-600 dark:text-indigo-300 hover:underline">English</button>
+                 <button id="dark-mode-toggle" class="p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <svg id="theme-toggle-dark-icon" class="w-5 h-5 hidden" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg>
+                    <svg id="theme-toggle-light-icon" class="w-5 h-5 hidden" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" fill-rule="evenodd" clip-rule="evenodd"></path></svg>
+                </button>
+                <button id="export-csv" class="text-sm font-medium bg-green-500 hover:bg-green-600 text-white py-2 px-3 rounded-md shadow">
+                    <span class="lang-th">ส่งออก CSV</span>
+                    <span class="lang-en hidden">Export CSV</span>
+                </button>
+            </div>
+            <nav class="mb-6 pb-2 border-b border-gray-300 dark:border-gray-600">
+                <ul class="flex space-x-2 sm:space-x-4 overflow-x-auto">
+                    <li><button data-view="category" class="view-tab tab-button py-2 px-3 text-sm sm:text-base">
+                        <span class="lang-th">ตามหมวดหมู่</span><span class="lang-en hidden">By Category</span>
+                    </button></li>
+                    <li><button data-view="today" class="view-tab tab-button py-2 px-3 text-sm sm:text-base">
+                        <span class="lang-th">รายการวันนี้</span><span class="lang-en hidden">Today's List</span>
+                    </button></li>
+                    <li><button data-view="time_morning" class="view-tab tab-button py-2 px-3 text-sm sm:text-base">
+                        <span class="lang-th">ช่วงเช้า</span><span class="lang-en hidden">Morning</span>
+                    </button></li>
+                    <li><button data-view="time_afternoon" class="view-tab tab-button py-2 px-3 text-sm sm:text-base">
+                        <span class="lang-th">ช่วงบ่าย/เย็น</span><span class="lang-en hidden">Afternoon/Evening</span>
+                    </button></li>
+                    <li><button data-view="time_night" class="view-tab tab-button py-2 px-3 text-sm sm:text-base">
+                        <span class="lang-th">ช่วงกลางคืน</span><span class="lang-en hidden">Night</span>
+                    </button></li>
+                </ul>
+            </nav>
+            <main id="task-area" class="space-y-6">
+                </main>
+        </div>
+
+        <div id="login-prompt" class="text-center p-8">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-800 dark:text-gray-100">
+                <span class="lang-th">กรุณาเข้าสู่ระบบเพื่อใช้งาน</span>
+                <span class="lang-en hidden">Please Login to Use the App</span>
+            </h2>
+            <p class="text-gray-600 dark:text-gray-300 mb-6">
+                <span class="lang-th">บันทึกและซิงค์รายการสิ่งที่ต้องทำของคุณผ่านอุปกรณ์ต่างๆ</span>
+                <span class="lang-en hidden">Save and sync your to-do lists across devices.</span>
+            </p>
+            </div>
+
+
+        <footer class="mt-12 text-center text-xs text-gray-500 dark:text-gray-400">
+            <p>ครูพร้อมสอน (Kru Prom Sorn) v1.3 - Firebase</p>
+        </footer>
+    </div>
+
+    <script>
+        // --- START FIREBASE CONFIG ---
+        // IMPORTANT: Replace with your actual Firebase project configuration
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+        // --- END FIREBASE CONFIG ---
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const googleProvider = new firebase.auth.GoogleAuthProvider();
+
+        // --- Global Variables ---
+        let currentUser = null;
+        let appData = { // Holds user-specific settings (language, dark mode, view)
+            currentLanguage: 'th',
+            darkMode: false,
+            currentView: 'category',
+        };
+        let userTasks = []; // Holds the tasks array for the current user, fetched from Firestore
+
+        // Default task structure for new users (deep copy this when needed)
+        const defaultTasksStructure = [
+            {
+                id: 'term_start', title_th: 'ก่อนเปิดภาคเรียน', title_en: 'Before Start of Term',
+                items: [
+                    { id: 'bst001', text_th: 'จัดโต๊ะ เก้าอี้ และสื่อการเรียนการสอน', text_en: 'Arrange desks, chairs, and teaching materials', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                    { id: 'bst002', text_th: 'วางแผนรายปี / หน่วยการสอน', text_en: 'Annual / Unit lesson planning', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                    { id: 'bst003', text_th: 'เตรียมแฟ้มสะสมงานนักเรียน', text_en: 'Prepare student portfolios', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                    { id: 'bst004', text_th: 'ประชุมวางแผนกับครูประจำชั้นและฝ่ายวิชาการ', text_en: 'Planning meeting with homeroom teachers and academic department', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                    { id: 'bst005', text_th: 'ตรวจสอบชื่อและข้อมูลพื้นฐานของนักเรียน', text_en: 'Verify student names and basic information', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                    { id: 'bst006', text_th: 'จัดทำป้ายชื่อนักเรียนและตกแต่งห้องเรียน', text_en: 'Create student name tags and decorate classroom', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                    { id: 'bst007', text_th: 'เตรียมเอกสารสำหรับผู้ปกครอง (กำหนดการ, สิ่งที่ต้องเตรียม)', text_en: 'Prepare documents for parents (schedule, required items)', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                ]
+            },
+            {
+                id: 'daily_routine', title_th: 'กิจวัตรประจำวัน', title_en: 'Daily Routine',
+                subCategories: [
+                    {
+                        id: 'daily_before_class', title_th: 'ก่อนเริ่มสอน', title_en: 'Before Class',
+                        items: [
+                            { id: 'dbc001', text_th: 'เช็คชื่อนักเรียน', text_en: 'Check student attendance', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                            { id: 'dbc002', text_th: 'เตรียมใบงานและสื่อการสอนสำหรับวันนี้', text_en: 'Prepare worksheets and teaching materials for the day', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                            { id: 'dbc003', text_th: 'ทบทวนแผนการสอนของวันนี้', text_en: 'Review today\'s lesson plan', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                            { id: 'dbc004', text_th: 'ทักทายนักเรียนที่ประตูห้องเรียน', text_en: 'Greeting students at the door', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                            { id: 'dbc005', text_th: 'ตรวจสอบความสะอาดและความเรียบร้อยของห้องเรียน', text_en: 'Check classroom cleanliness and orderliness', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                            { id: 'dbc006', text_th: 'ประชุมทีมสั้นๆ หรือประชุมครู (ถ้ามี)', text_en: 'Brief team talk or staff meeting (if any)', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                        ]
+                    },
+                    {
+                        id: 'daily_after_class', title_th: 'หลังเลิกสอน', title_en: 'After Class',
+                        items: [
+                            { id: 'dac001', text_th: 'ตรวจการบ้าน / ให้คะแนนงานนักเรียน', text_en: 'Mark homework / Grade student assignments', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                            { id: 'dac002', text_th: 'จดบันทึกพฤติกรรมนักเรียนหรือความก้าวหน้า', text_en: 'Document student behavior or progress', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                            { id: 'dac003', text_th: 'เตรียมสื่อและอุปกรณ์การสอนสำหรับวันพรุ่งนี้', text_en: 'Prepare materials and equipment for next day', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                            { id: 'dac004', text_th: 'ประชุมครู / ติดตามงานเอกสารราชการ (ถ้ามี)', text_en: 'Teacher meeting / Follow up on official documents (if any)', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                        ]
+                    }
+                ]
+            },
+            {
+                id: 'before_bed', title_th: 'ก่อนนอน (ส่วนตัว)', title_en: 'Before Bed (Personal)',
+                items: [
+                    { id: 'bb001', text_th: 'ทบทวนแผนการสอนพรุ่งนี้ (คร่าวๆ)', text_en: 'Briefly review tomorrow\'s lesson plan', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                    { id: 'bb002', text_th: 'สรุปสิ่งที่ทำได้ดี / สิ่งที่ต้องปรับปรุง', text_en: 'Reflect on today: good/needs work', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                    { id: 'bb003', text_th: 'ดื่มน้ำ / พักผ่อน', text_en: 'Drink water / Relax', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                    { id: 'bb004', text_th: 'เตือนให้เข้านอนตรงเวลา / ตั้งนาฬิกาปลุก', text_en: 'Reminder to sleep on time / Set alarm', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                    { id: 'bb005', text_th: 'เตรียมเสื้อผ้าสำหรับวันพรุ่งนี้', text_en: 'Set out clothes for tomorrow', completed: false, isCustom: false, dueDate: null, notificationShown: false },
+                ]
+            }
+        ];
+
+
+        // --- DOM Elements ---
+        const appTitle = document.getElementById('app-title');
+        const appSubtitle = document.getElementById('app-subtitle');
+        const authControlsUI = document.getElementById('auth-controls');
+        const userInfoUI = document.getElementById('user-info');
+        const mainContentUI = document.getElementById('main-content');
+        const loginPromptUI = document.getElementById('login-prompt');
+
+        const languageToggleBtn = document.getElementById('language-toggle');
+        const darkModeToggleBtn = document.getElementById('dark-mode-toggle');
+        const themeToggleDarkIcon = document.getElementById('theme-toggle-dark-icon');
+        const themeToggleLightIcon = document.getElementById('theme-toggle-light-icon');
+        const exportCsvBtn = document.getElementById('export-csv');
+        const taskArea = document.getElementById('task-area');
+        const viewTabs = document.querySelectorAll('.view-tab');
+
+
+        // --- Firebase Helper Functions ---
+        const getUserDocRef = () => {
+            if (!currentUser) return null;
+            return db.collection('users').doc(currentUser.uid);
+        };
+
+        const saveUserDataToFirestore = async () => {
+            if (!currentUser) return;
+            const userDocRef = getUserDocRef();
+            try {
+                // Create a deep copy of userTasks to avoid saving temporary flags like 'editingDueDate'
+                const tasksToSave = JSON.parse(JSON.stringify(userTasks)).map(category => {
+                    if (category.items) {
+                        category.items = category.items.map(item => {
+                            const { editingDueDate, ...restOfItem } = item; // Remove editingDueDate
+                            return restOfItem;
+                        });
+                    }
+                    if (category.subCategories) {
+                        category.subCategories = category.subCategories.map(subCat => {
+                            if (subCat.items) {
+                                subCat.items = subCat.items.map(item => {
+                                    const { editingDueDate, ...restOfItem } = item;
+                                    return restOfItem;
+                                });
+                            }
+                            return subCat;
+                        });
+                    }
+                    return category;
+                });
+
+                await userDocRef.set({
+                    settings: appData, 
+                    tasks: tasksToSave  
+                }, { merge: true });
+                console.log("User data saved to Firestore.");
+            } catch (error) {
+                console.error("Error saving user data to Firestore: ", error);
+                alert(getLocalizedText({text_th: "เกิดข้อผิดพลาดในการบันทึกข้อมูล", text_en: "Error saving data."}));
+            }
+        };
+
+        const loadUserDataFromFirestore = async () => {
+            if (!currentUser) return;
+            const userDocRef = getUserDocRef();
+            try {
+                const doc = await userDocRef.get();
+                if (doc.exists) {
+                    const data = doc.data();
+                    if (data.settings) {
+                        // Merge settings, prioritizing Firestore but keeping local defaults if not set
+                        appData = {
+                            currentLanguage: data.settings.currentLanguage || 'th',
+                            darkMode: data.settings.darkMode !== undefined ? data.settings.darkMode : false,
+                            currentView: data.settings.currentView || 'category'
+                        };
+                    }
+                    userTasks = data.tasks || JSON.parse(JSON.stringify(defaultTasksStructure)); 
+                    console.log("User data loaded from Firestore.");
+                } else {
+                    console.log("New user, initializing default data.");
+                    userTasks = JSON.parse(JSON.stringify(defaultTasksStructure));
+                    appData = { currentLanguage: 'th', darkMode: false, currentView: 'category' };
+                    await saveUserDataToFirestore(); 
+                }
+            } catch (error) {
+                console.error("Error loading user data from Firestore: ", error);
+                userTasks = JSON.parse(JSON.stringify(defaultTasksStructure)); 
+                appData = { currentLanguage: 'th', darkMode: false, currentView: 'category' };
+            }
+            // Apply loaded settings and render
+            applyDarkMode();
+            updateUIForLanguage();
+            viewTabs.forEach(t => t.classList.remove('active')); // Clear all active first
+            const activeTab = document.querySelector(`.view-tab[data-view="${appData.currentView}"]`);
+            if (activeTab) {
+                activeTab.classList.add('active');
+            } else { // Fallback
+                document.querySelector('.view-tab[data-view="category"]').classList.add('active');
+                appData.currentView = 'category';
+            }
+            renderTasks();
+            checkAndShowReminders();
+        };
+
+
+        // --- AUTHENTICATION ---
+        const signInWithGoogle = () => {
+            auth.signInWithPopup(googleProvider)
+                .then((result) => {
+                    console.log("Signed in with Google:", result.user.displayName);
+                    // onAuthStateChanged will handle the rest
+                })
+                .catch((error) => {
+                    console.error("Google Sign-In Error:", error);
+                    alert(`${getLocalizedText({text_th: "เกิดข้อผิดพลาดในการเข้าสู่ระบบด้วย Google:", text_en: "Error signing in with Google:"})} ${error.message}`);
+                });
+        };
+
+        const signOutUser = () => {
+            auth.signOut()
+                .then(() => {
+                    console.log("User signed out.");
+                     // onAuthStateChanged will handle UI changes
+                })
+                .catch((error) => {
+                    console.error("Sign Out Error:", error);
+                });
+        };
+
+        auth.onAuthStateChanged(async (user) => {
+            currentUser = user;
+            if (user) {
+                userInfoUI.textContent = `${getLocalizedText({text_th: "สวัสดี", text_en: "Hello"})}, ${user.displayName || user.email}!`;
+                authControlsUI.innerHTML = `
+                    <button id="logout-button" class="text-sm font-medium bg-red-500 hover:bg-red-600 text-white py-2 px-3 rounded-md shadow">
+                        <span class="lang-th">ออกจากระบบ</span>
+                        <span class="lang-en hidden">Logout</span>
+                    </button>
+                `;
+                document.getElementById('logout-button').addEventListener('click', signOutUser);
+                
+                mainContentUI.classList.remove('hidden');
+                loginPromptUI.classList.add('hidden');
+                
+                await loadUserDataFromFirestore(); // Load data after user is confirmed
+            } else {
+                userInfoUI.textContent = '';
+                const loginButtonHTML = `
+                    <button id="login-google-button" class="text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded-md shadow flex items-center">
+                        <svg class="w-4 h-4 mr-2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="white"><path d="M22.56,12.25C22.56,11.47 22.49,10.72 22.36,10H12V14.26H17.94C17.71,15.61 16.95,16.79 15.82,17.57V20.06H19.11C21.2,18.24 22.56,15.47 22.56,12.25Z"/><path d="M12,23C14.97,23 17.5,22.04 19.11,20.06L15.82,17.57C14.79,18.27 13.49,18.69 12,18.69C9.32,18.69 7.03,17.06 6.16,14.71H2.74V17.24C4.39,20.71 7.89,23 12,23Z"/><path d="M6.16,14.71C5.94,14.06 5.81,13.35 5.81,12.62C5.81,11.88 5.94,11.17 6.16,10.52V8H2.74C1.76,9.92 1.11,11.7 1.11,13.38C1.11,15.07 1.76,16.85 2.74,18.77L6.16,14.71Z"/><path d="M12,5.81C13.81,5.81 15.22,6.49 15.82,7.06L19.17,3.71C17.5,2.09 14.97,1 12,1C7.89,1 4.39,3.29 2.74,6.76L6.16,9.29C7.03,6.94 9.32,5.81 12,5.81Z"/></svg>
+                        <span class="lang-th">เข้าสู่ระบบด้วย Google</span>
+                        <span class="lang-en hidden">Login with Google</span>
+                    </button>
+                `;
+                authControlsUI.innerHTML = loginButtonHTML; // For header
+                
+                // Clear existing login button from prompt before adding new one
+                const existingLoginBtnInPrompt = loginPromptUI.querySelector('#login-google-button');
+                if (existingLoginBtnInPrompt) existingLoginBtnInPrompt.remove();
+                loginPromptUI.insertAdjacentHTML('beforeend', loginButtonHTML); // For prompt area
+
+                document.querySelectorAll('#login-google-button').forEach(btn => btn.addEventListener('click', signInWithGoogle));
+
+                mainContentUI.classList.add('hidden');
+                loginPromptUI.classList.remove('hidden');
+                userTasks = []; 
+                taskArea.innerHTML = ''; 
+            }
+            updateUIForLanguage(); // Ensure button text is correct for current language
+        });
+
+
+        // --- UTILITY FUNCTIONS (Kept) ---
+        const getLocalizedText = (item, fieldPrefix = 'text') => {
+            return item[`${fieldPrefix}_${appData.currentLanguage}`] || item[`${fieldPrefix}_en`];
+        };
+        const generateId = () => `custom_${new Date().getTime()}_${Math.random().toString(36).substr(2, 9)}`;
+        const formatDueDate = (dateString) => {
+            if (!dateString) return '';
+            const date = new Date(dateString);
+            const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: appData.currentLanguage === 'en' };
+            return date.toLocaleString(appData.currentLanguage === 'th' ? 'th-TH' : 'en-US', options);
+        };
+
+        // --- NOTIFICATION FUNCTIONS (Kept) ---
+        const requestNotificationPermission = async () => { 
+            if (!('Notification' in window)) {
+                alert(getLocalizedText({text_th: 'เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน', text_en: 'This browser does not support desktop notification'}));
+                return false;
+            }
+            if (Notification.permission === 'granted') return true;
+            if (Notification.permission !== 'denied') {
+                const permission = await Notification.requestPermission();
+                return permission === 'granted';
+            }
+            return false;
+        };
+        const showNotification = (task) => { 
+            const title = getLocalizedText({text_th: '🔔 ครูพร้อมสอน: แจ้งเตือนงาน', text_en: '🔔 Teacher\'s Prep: Task Reminder'});
+            const body = getLocalizedText(task);
+            const options = { body: body, icon: 'https://placehold.co/48x48/6366f1/ffffff?text=🔔' };
+            new Notification(title, options);
+        };
+        const checkAndShowReminders = () => {
+            if (!currentUser || !userTasks || userTasks.length === 0) return; 
+            const now = new Date();
+            let madeChanges = false;
+            userTasks.forEach(category => {
+                const items = category.items || (category.subCategories ? category.subCategories.flatMap(sc => sc.items) : []);
+                items.forEach(task => {
+                    if (task.dueDate && !task.notificationShown) {
+                        const dueDate = new Date(task.dueDate);
+                        if (now >= dueDate) {
+                            if (Notification.permission === 'granted') {
+                                showNotification(task);
+                                task.notificationShown = true;
+                                madeChanges = true;
+                            } else if (Notification.permission === 'default') {
+                                console.log("Notification permission not yet granted for task:", task.id);
+                            }
+                        }
+                    }
+                });
+            });
+            if (madeChanges) {
+                saveUserDataToFirestore(); 
+            }
+        };
+
+
+        // --- RENDERING FUNCTIONS (Largely same, uses userTasks) ---
+        const renderTasks = () => {
+            if (!currentUser) { 
+                taskArea.innerHTML = '';
+                return;
+            }
+            taskArea.innerHTML = '';
+            let categoriesToRender = [];
+
+            if (appData.currentView === 'category') {
+                userTasks.forEach(category => {
+                    if (category.items) categoriesToRender.push(JSON.parse(JSON.stringify(category)));
+                    else if (category.subCategories) category.subCategories.forEach(subCat => categoriesToRender.push(JSON.parse(JSON.stringify(subCat))));
+                });
+            } else if (appData.currentView === 'today') {
+                const dailyRoutine = userTasks.find(cat => cat.id === 'daily_routine');
+                if (dailyRoutine && dailyRoutine.subCategories) dailyRoutine.subCategories.forEach(subCat => categoriesToRender.push(JSON.parse(JSON.stringify(subCat))));
+            } else if (appData.currentView === 'time_morning') {
+                const dailyRoutine = userTasks.find(cat => cat.id === 'daily_routine');
+                const beforeClass = dailyRoutine?.subCategories.find(sc => sc.id === 'daily_before_class');
+                if (beforeClass) categoriesToRender.push(JSON.parse(JSON.stringify(beforeClass)));
+            } else if (appData.currentView === 'time_afternoon') {
+                const dailyRoutine = userTasks.find(cat => cat.id === 'daily_routine');
+                const afterClass = dailyRoutine?.subCategories.find(sc => sc.id === 'daily_after_class');
+                if (afterClass) categoriesToRender.push(JSON.parse(JSON.stringify(afterClass)));
+            } else if (appData.currentView === 'time_night') {
+                const beforeBed = userTasks.find(cat => cat.id === 'before_bed');
+                if (beforeBed) categoriesToRender.push(JSON.parse(JSON.stringify(beforeBed)));
+            }
+
+            categoriesToRender.forEach(category => {
+                const categoryDiv = document.createElement('div');
+                categoryDiv.className = 'bg-white dark:bg-gray-700 shadow-lg rounded-xl p-4 sm:p-6';
+                const categoryTitle = document.createElement('h2');
+                categoryTitle.className = 'text-xl sm:text-2xl font-semibold mb-2 text-gray-800 dark:text-gray-100 border-b-2 border-indigo-500 dark:border-indigo-400 pb-2';
+                categoryTitle.textContent = getLocalizedText(category, 'title');
+                categoryDiv.appendChild(categoryTitle);
+
+                const totalTasks = category.items.length;
+                const completedTasks = category.items.filter(task => task.completed).length;
+                const progressPercentage = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+                const progressContainerDiv = document.createElement('div');
+                progressContainerDiv.className = 'flex items-center my-3';
+                const progressBarBg = document.createElement('div');
+                progressBarBg.className = 'w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5 mr-3';
+                const progressBarFill = document.createElement('div');
+                progressBarFill.className = 'progress-bar-fill bg-indigo-500 dark:bg-indigo-400 h-2.5 rounded-full';
+                progressBarFill.style.width = `${progressPercentage}%`;
+                progressBarBg.appendChild(progressBarFill);
+                progressContainerDiv.appendChild(progressBarBg);
+                const progressText = document.createElement('span');
+                progressText.className = 'text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap';
+                progressText.textContent = `${Math.round(progressPercentage)}%`;
+                progressContainerDiv.appendChild(progressText);
+                categoryDiv.appendChild(progressContainerDiv);
+
+                const ul = document.createElement('ul');
+                ul.className = 'space-y-3';
+                category.items.forEach(task => {
+                    const li = document.createElement('li');
+                    li.className = 'task-item flex items-start justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors duration-150';
+                    li.dataset.taskId = task.id;
+                    li.dataset.categoryId = category.id;
+                    const taskMainContentDiv = document.createElement('div');
+                    taskMainContentDiv.className = 'flex-grow mr-2';
+                    const taskTopRowDiv = document.createElement('div');
+                    taskTopRowDiv.className = 'flex items-center';
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.checked = task.completed;
+                    checkbox.className = 'form-checkbox h-5 w-5 text-indigo-600 dark:text-indigo-400 border-gray-300 dark:border-gray-500 rounded focus:ring-indigo-500 dark:focus:ring-indigo-400 mr-3 flex-shrink-0 mt-1';
+                    checkbox.addEventListener('change', () => toggleTaskComplete(category.id, task.id));
+                    const taskTextSpan = document.createElement('span');
+                    taskTextSpan.textContent = getLocalizedText(task);
+                    taskTextSpan.className = `text-gray-700 dark:text-gray-200 ${task.completed ? 'line-through text-gray-500 dark:text-gray-400' : ''}`;
+                    if (task.isCustom) {
+                        taskTextSpan.classList.add('cursor-pointer', 'hover:text-indigo-500', 'dark:hover:text-indigo-300');
+                        taskTextSpan.addEventListener('click', () => enableTaskEdit(taskTextSpan, category.id, task.id));
+                    }
+                    taskTopRowDiv.appendChild(checkbox);
+                    taskTopRowDiv.appendChild(taskTextSpan);
+                    taskMainContentDiv.appendChild(taskTopRowDiv);
+
+                    const dueDateContainer = document.createElement('div');
+                    dueDateContainer.className = 'ml-8 mt-1 text-xs';
+                    if (task.editingDueDate) {
+                        const dateInputDiv = document.createElement('div');
+                        dateInputDiv.className = 'date-input-container flex items-center space-x-1';
+                        const dateInput = document.createElement('input');
+                        dateInput.type = 'datetime-local';
+                        dateInput.className = 'p-1 border border-gray-300 dark:border-gray-500 rounded-md text-xs';
+                        dateInput.value = task.dueDate ? task.dueDate.slice(0, 16) : '';
+                        const saveDateBtn = document.createElement('button');
+                        saveDateBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-500 hover:text-green-700" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>`;
+                        saveDateBtn.title = getLocalizedText({text_th: 'บันทึกวันที่', text_en: 'Save Date'});
+                        saveDateBtn.onclick = () => setTaskDueDate(category.id, task.id, dateInput.value);
+                        const cancelDateBtn = document.createElement('button');
+                        cancelDateBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-500 hover:text-gray-700" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>`;
+                        cancelDateBtn.title = getLocalizedText({text_th: 'ยกเลิก', text_en: 'Cancel'});
+                        cancelDateBtn.onclick = () => toggleDueDateEdit(category.id, task.id, false);
+                        dateInputDiv.appendChild(dateInput);
+                        dateInputDiv.appendChild(saveDateBtn);
+                        dateInputDiv.appendChild(cancelDateBtn);
+                        if (task.dueDate) {
+                            const clearBtn = document.createElement('button');
+                            clearBtn.innerHTML = `&times;`;
+                            clearBtn.className = 'clear-date-btn text-sm';
+                            clearBtn.title = getLocalizedText({text_th: 'ลบวันที่', text_en: 'Clear Date'});
+                            clearBtn.onclick = (e) => { e.stopPropagation(); setTaskDueDate(category.id, task.id, null); };
+                            dateInputDiv.appendChild(clearBtn);
+                        }
+                        dueDateContainer.appendChild(dateInputDiv);
+                    } else if (task.dueDate) {
+                        const dueDateText = document.createElement('span');
+                        dueDateText.className = 'due-date-text text-gray-500 dark:text-gray-400';
+                        dueDateText.textContent = `${getLocalizedText({text_th: 'ครบกำหนด: ', text_en: 'Due: '})}${formatDueDate(task.dueDate)}`;
+                        if (new Date(task.dueDate) < new Date() && !task.completed) dueDateText.classList.add('overdue');
+                        dueDateContainer.appendChild(dueDateText);
+                    }
+                    taskMainContentDiv.appendChild(dueDateContainer);
+                    li.appendChild(taskMainContentDiv);
+
+                    const actionButtonsDiv = document.createElement('div');
+                    actionButtonsDiv.className = 'task-actions flex-shrink-0 ml-2 space-x-1';
+                    const dueDateBtn = document.createElement('button');
+                    dueDateBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd" /></svg>`;
+                    dueDateBtn.className = 'text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 p-1 rounded-full';
+                    dueDateBtn.title = getLocalizedText({text_th: 'ตั้งวันที่ครบกำหนด', text_en: 'Set Due Date'});
+                    dueDateBtn.addEventListener('click', () => toggleDueDateEdit(category.id, task.id, true));
+                    actionButtonsDiv.appendChild(dueDateBtn);
+                    if (task.isCustom) {
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>`;
+                        deleteBtn.className = 'text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 p-1 rounded-full';
+                        deleteBtn.title = appData.currentLanguage === 'th' ? 'ลบงาน' : 'Delete Task';
+                        deleteBtn.addEventListener('click', () => deleteTask(category.id, task.id));
+                        actionButtonsDiv.appendChild(deleteBtn);
+                    }
+                    li.appendChild(actionButtonsDiv);
+                    ul.appendChild(li);
+                });
+                categoryDiv.appendChild(ul);
+
+                const addTaskForm = document.createElement('form');
+                addTaskForm.className = 'mt-4 flex items-center space-x-2';
+                addTaskForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const input = addTaskForm.querySelector('input[type="text"]');
+                    if (input.value.trim()) {
+                        addNewTask(category.id, input.value.trim());
+                        input.value = '';
+                    }
+                });
+                const taskInput = document.createElement('input');
+                taskInput.type = 'text';
+                taskInput.className = 'flex-grow p-2 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-600 dark:text-gray-100';
+                taskInput.placeholder = appData.currentLanguage === 'th' ? 'เพิ่มงานใหม่...' : 'Add new task...';
+                const addTaskBtn = document.createElement('button');
+                addTaskBtn.type = 'submit';
+                addTaskBtn.className = 'bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition-colors';
+                addTaskBtn.textContent = appData.currentLanguage === 'th' ? 'เพิ่ม' : 'Add';
+                addTaskForm.appendChild(taskInput);
+                addTaskForm.appendChild(addTaskBtn);
+                categoryDiv.appendChild(addTaskForm);
+                taskArea.appendChild(categoryDiv);
+            });
+            updateUIForLanguage();
+        };
+
+        const enableTaskEdit = (spanElement, categoryId, taskId) => { 
+            const currentText = spanElement.textContent;
+            const inputElement = document.createElement('input');
+            inputElement.type = 'text';
+            inputElement.value = currentText;
+            inputElement.className = 'text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-600 border border-indigo-300 dark:border-indigo-500 rounded px-1 py-0.5 w-full';
+            spanElement.replaceWith(inputElement);
+            inputElement.focus();
+            const saveEdit = () => {
+                const newText = inputElement.value.trim();
+                updateTaskText(categoryId, taskId, newText); 
+                renderTasks(); 
+            };
+            inputElement.addEventListener('blur', saveEdit);
+            inputElement.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); saveEdit(); } 
+                else if (e.key === 'Escape') { renderTasks(); }
+            });
+        };
+        
+        const updateUIForLanguage = () => {
+            document.documentElement.lang = appData.currentLanguage;
+            appTitle.textContent = appData.currentLanguage === 'th' ? 'ครูพร้อมสอน' : "Teacher's Prep List";
+            document.querySelectorAll('.lang-th').forEach(el => el.classList.toggle('hidden', appData.currentLanguage !== 'th'));
+            document.querySelectorAll('.lang-en').forEach(el => el.classList.toggle('hidden', appData.currentLanguage !== 'en'));
+            
+            if(languageToggleBtn) { 
+                languageToggleBtn.textContent = appData.currentLanguage === 'th' ? 'English' : 'ไทย';
+            }
+            document.querySelectorAll('#task-area input[type="text"]').forEach(input => {
+                input.placeholder = appData.currentLanguage === 'th' ? 'เพิ่มงานใหม่...' : 'Add new task...';
+            });
+            document.querySelectorAll('#task-area button[type="submit"]').forEach(button => {
+                button.textContent = appData.currentLanguage === 'th' ? 'เพิ่ม' : 'Add';
+            });
+        };
+
+        const applyDarkMode = () => { 
+            if (appData.darkMode) {
+                document.documentElement.classList.add('dark');
+                if(themeToggleLightIcon) themeToggleLightIcon.classList.remove('hidden');
+                if(themeToggleDarkIcon) themeToggleDarkIcon.classList.add('hidden');
+            } else {
+                document.documentElement.classList.remove('dark');
+                if(themeToggleDarkIcon) themeToggleDarkIcon.classList.remove('hidden');
+                if(themeToggleLightIcon) themeToggleLightIcon.classList.add('hidden');
+            }
+        };
+
+        // --- EVENT HANDLERS & LOGIC (Modified for Firestore) ---
+        const toggleTaskComplete = (displayCategoryId, taskId) => {
+            if (!currentUser) return;
+            const task = findOriginalTaskById(taskId, userTasks);
+            if (task) {
+                task.completed = !task.completed;
+                saveUserDataToFirestore();
+                renderTasks(); 
+            }
+        };
+        
+        const findOriginalTaskById = (taskId, tasksArray = userTasks) => { 
+            for (const mainCat of tasksArray) {
+                if (mainCat.items) {
+                    const task = mainCat.items.find(item => item.id === taskId);
+                    if (task) return task;
+                }
+                if (mainCat.subCategories) {
+                    for (const subCat of mainCat.subCategories) {
+                        if (subCat.items) {
+                            const task = subCat.items.find(item => item.id === taskId);
+                            if (task) return task;
+                        }
+                    }
+                }
+            }
+            return null;
+        };
+
+        const addNewTask = (displayCategoryId, taskText) => {
+            if (!currentUser) return;
+            const newTask = {
+                id: generateId(), text_th: taskText, text_en: taskText, 
+                completed: false, isCustom: true, dueDate: null, notificationShown: false
+            };
+            if (/[\u0E00-\u0E7F]/.test(taskText)) { newTask.text_th = taskText; newTask.text_en = taskText; } 
+            else { newTask.text_en = taskText; newTask.text_th = taskText; }
+            
+            const originalCategory = findCategoryOrSubcategory(displayCategoryId, userTasks); 
+             if (originalCategory && originalCategory.items) {
+                originalCategory.items.push(newTask);
+                saveUserDataToFirestore();
+                renderTasks();
+            } else { console.error("Original category not found in userTasks for ID:", displayCategoryId); }
+        };
+        
+        const updateTaskText = (displayCategoryId, taskId, newText) => {
+            if (!currentUser) return;
+            if (!newText.trim()) { renderTasks(); return; }
+            const task = findOriginalTaskById(taskId, userTasks);
+            if (task && task.isCustom) {
+                task[`text_${appData.currentLanguage}`] = newText;
+                saveUserDataToFirestore();
+            }
+        };
+
+        const deleteTask = (displayCategoryId, taskId) => {
+            if (!currentUser) return;
+            const originalCategory = findOriginalCategoryForItem(taskId, userTasks);
+            if(originalCategory){
+                 originalCategory.items = originalCategory.items.filter(t => t.id !== taskId);
+                 saveUserDataToFirestore();
+                 renderTasks();
+            }
+        };
+
+        const findOriginalCategoryForItem = (taskId, tasksArray = userTasks) => { 
+            for (const mainCat of tasksArray) {
+                if (mainCat.items && mainCat.items.find(item => item.id === taskId)) return mainCat;
+                if (mainCat.subCategories) {
+                    for (const subCat of mainCat.subCategories) {
+                        if (subCat.items && subCat.items.find(item => item.id === taskId)) return subCat;
+                    }
+                }
+            }
+            return null;
+        };
+
+        const findCategoryOrSubcategory = (id, source = userTasks) => { 
+            for (let category of source) {
+                if (category.id === id) return category;
+                if (category.subCategories) {
+                    for (let subCategory of category.subCategories) {
+                        if (subCategory.id === id) return subCategory;
+                    }
+                }
+            }
+            return null;
+        };
+
+        const toggleDueDateEdit = (displayCategoryId, taskId, isEditing) => {
+            if (!currentUser) return;
+            const originalTask = findOriginalTaskById(taskId, userTasks);
+            if (originalTask) {
+                originalTask.editingDueDate = isEditing; 
+                renderTasks(); 
+                // The temporary flag 'editingDueDate' will be removed when data is saved to Firestore
+                // or naturally when the task is re-rendered without it.
+            }
+        };
+
+        const setTaskDueDate = async (displayCategoryId, taskId, dueDateValue) => {
+            if (!currentUser) return;
+            if (Notification.permission === 'default') await requestNotificationPermission();
+            const task = findOriginalTaskById(taskId, userTasks);
+            if (task) {
+                task.dueDate = dueDateValue ? new Date(dueDateValue).toISOString() : null;
+                task.notificationShown = false; 
+                task.editingDueDate = false; 
+                await saveUserDataToFirestore();
+                checkAndShowReminders(); 
+                renderTasks();
+            }
+        };
+
+        // --- Event Listeners for App Controls (Language, Dark Mode, View, Export) ---
+        if(languageToggleBtn) languageToggleBtn.addEventListener('click', () => {
+            if (!currentUser) return;
+            appData.currentLanguage = appData.currentLanguage === 'th' ? 'en' : 'th';
+            saveUserDataToFirestore(); 
+            updateUIForLanguage(); 
+            renderTasks(); 
+        });
+
+        if(darkModeToggleBtn) darkModeToggleBtn.addEventListener('click', () => {
+            if (!currentUser) return;
+            appData.darkMode = !appData.darkMode;
+            applyDarkMode();
+            saveUserDataToFirestore(); 
+        });
+        
+        viewTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                if (!currentUser) return;
+                appData.currentView = tab.dataset.view;
+                viewTabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                saveUserDataToFirestore(); 
+                renderTasks();
+            });
+        });
+
+        if(exportCsvBtn) exportCsvBtn.addEventListener('click', () => { 
+            if (!currentUser) return;
+            let csvContent = "\uFEFF"; 
+            csvContent += `Category (${appData.currentLanguage}),Task (${appData.currentLanguage}),Completed,Due Date (${appData.currentLanguage})\n`;
+            const processCategoryForCSV = (cat) => {
+                const categoryTitle = getLocalizedText(cat, 'title');
+                cat.items.forEach(task => {
+                    let taskText = getLocalizedText(task);
+                    taskText = `"${taskText.replace(/"/g, '""')}"`; 
+                    const completedStatus = task.completed ? (appData.currentLanguage === 'th' ? 'เสร็จแล้ว' : 'Completed') : (appData.currentLanguage === 'th' ? 'ยังไม่เสร็จ' : 'Pending');
+                    const dueDateFormatted = task.dueDate ? formatDueDate(task.dueDate) : '';
+                    csvContent += `"${categoryTitle}",${taskText},"${completedStatus}","${dueDateFormatted}"\n`;
+                });
+            };
+            let categoriesForCsv = [];
+             if (appData.currentView === 'category') {
+                userTasks.forEach(category => { 
+                    if (category.items) categoriesForCsv.push(category);
+                    else if (category.subCategories) category.subCategories.forEach(subCat => categoriesForCsv.push(subCat));
+                });
+            } else if (appData.currentView === 'today') {
+                const daily = userTasks.find(c => c.id === 'daily_routine');
+                if (daily && daily.subCategories) daily.subCategories.forEach(sc => categoriesForCsv.push(sc));
+            } else if (appData.currentView === 'time_morning') {
+                const daily = userTasks.find(c => c.id === 'daily_routine');
+                const morning = daily?.subCategories.find(sc => sc.id === 'daily_before_class');
+                if (morning) categoriesForCsv.push(morning);
+            } else if (appData.currentView === 'time_afternoon') {
+                const daily = userTasks.find(c => c.id === 'daily_routine');
+                const afternoon = daily?.subCategories.find(sc => sc.id === 'daily_after_class');
+                if (afternoon) categoriesForCsv.push(afternoon);
+            } else if (appData.currentView === 'time_night') {
+                const night = userTasks.find(c => c.id === 'before_bed');
+                if (night) categoriesForCsv.push(night);
+            }
+            categoriesForCsv.forEach(cat => processCategoryForCSV(cat));
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", "data:text/csv;charset=utf-8," + encodedUri);
+            link.setAttribute("download", `kru_prom_sorn_tasks_${appData.currentLanguage}_${appData.currentView}.csv`);
+            document.body.appendChild(link); 
+            link.click();
+            document.body.removeChild(link);
+        });
+
+        // --- INITIALIZATION ---
+        const initApp = () => {
+            // Apply local settings for the shell UI first
+            const localSettings = JSON.parse(localStorage.getItem('thaiTeacherTodoLocalSettings')) || {};
+            appData.currentLanguage = localSettings.currentLanguage || 'th';
+            appData.darkMode = localSettings.darkMode !== undefined ? localSettings.darkMode : false;
+            applyDarkMode(); // Apply dark mode to the whole page
+            updateUIForLanguage(); // Update language for login prompt
+
+            // Firebase onAuthStateChanged will handle the rest of the app initialization
+            // once the user's login state is known.
+
+            // Save local UI settings (language, dark mode) when the window is closed or refreshed
+            window.addEventListener('beforeunload', () => {
+                if (currentUser) { // Only save if a user is logged in, as these are part of their Firestore settings
+                    // These are already saved to Firestore via saveUserDataToFirestore calls
+                } else { // If no user, save to localStorage for the login screen's persistence
+                    localStorage.setItem('thaiTeacherTodoLocalSettings', JSON.stringify({
+                        currentLanguage: appData.currentLanguage,
+                        darkMode: appData.darkMode
+                    }));
+                }
+            });
+            setInterval(checkAndShowReminders, 60000); // Check reminders every minute
+        };
+
+        initApp();
+    </script>
+</body>
+</html>
